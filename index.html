@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мастер тестов — Главная генерация</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <div class="logo">
+        <div class="logo-icon">✓</div>
+        <div class="logo-text">
+          <div class="logo-title">Мастер тестов</div>
+          <div class="logo-subtitle">Генерация</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="#generator">Генератор</a>
+        <a href="#preview">Предварительный просмотр</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="hero">
+      <div class="hero-left">
+        <span class="badge">Главная страница</span>
+        <h1>Создавайте тесты, вопросы и смешанные задания</h1>
+        <p class="hero-text">
+          Введите тему, вставьте текст или загрузите TXT, PDF, DOCX.
+          Сервис создаст обычные вопросы, тест или смешанный режим и откроет
+          результат на отдельной странице.
+        </p>
+      </div>
+
+      <div class="hero-right" id="preview">
+        <div class="preview-card">
+          <div class="preview-top">
+            <span class="dot"></span>
+            <span class="dot"></span>
+            <span class="dot"></span>
+          </div>
+
+          <span class="mini-badge">Предпросмотр</span>
+          <h3 id="livePreviewTopic">Тест по теме: Информатика</h3>
+          <p id="livePreviewText">
+            Система автоматически создает вопросы и тесты на основе введенных данных.
+          </p>
+
+          <div class="line"></div>
+          <div class="line short"></div>
+          <div class="line"></div>
+
+          <h4>Режимы</h4>
+          <div class="chips">
+            <span class="chip" id="chipQuestions">Вопросы</span>
+            <span class="chip" id="chipTest">Тест</span>
+            <span class="chip chip-active" id="chipMixed">Смешанный</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="generator" id="generator">
+      <h2 class="section-title">Главная генерация</h2>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Исходные данные</h2>
+
+          <label for="topic">Тема</label>
+          <input type="text" id="topic" placeholder="Например: Информатика" />
+
+          <label for="sourceText">Текст для анализа</label>
+          <textarea
+            id="sourceText"
+            placeholder="Вставьте текст, на основе которого нужно создать вопросы..."
+          ></textarea>
+
+          <label for="fileInput">Загрузить файл</label>
+          <input type="file" id="fileInput" accept=".txt,.pdf,.docx" />
+
+          <p class="hint">Поддерживаются TXT, PDF и DOCX.</p>
+          <p class="hint" id="fileStatus"></p>
+        </div>
+
+        <div class="card">
+          <h2>Настройки</h2>
+
+          <label for="questionCount">Количество вопросов</label>
+          <input type="number" id="questionCount" min="1" max="300" value="10" />
+
+          <label for="mode">Режим</label>
+          <select id="mode">
+            <option value="questions">Только вопросы</option>
+            <option value="test">Тест с вариантами ответов</option>
+            <option value="mixed">Смешанный</option>
+          </select>
+
+          <label for="difficulty">Сложность</label>
+          <select id="difficulty">
+            <option value="easy">Легкая</option>
+            <option value="medium" selected>Средняя</option>
+            <option value="hard">Сложная</option>
+          </select>
+
+          <label for="openTimerMinutes">Таймер для обычных вопросов (минуты)</label>
+          <input type="number" id="openTimerMinutes" min="1" max="180" value="10" />
+
+          <div class="actions">
+            <button class="btn btn-primary" id="generateBtn">Сгенерировать</button>
+            <button class="btn btn-secondary" id="clearBtn">Очистить</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Статус</h2>
+        <div id="result">
+          <p class="empty-text">
+            После генерации произойдет переход на отдельную страницу результата.
+          </p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>
+    if (window.pdfjsLib) {
+      pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    }
+  </script>
+  <script src="https://unpkg.com/mammoth/mammoth.browser.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>

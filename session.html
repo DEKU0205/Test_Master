@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Мастер тестов — Сессия</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="header">
+    <div class="container header-inner">
+      <div class="logo">
+        <div class="logo-icon">✓</div>
+        <div class="logo-text">
+          <div class="logo-title">Мастер тестов</div>
+          <div class="logo-subtitle">страница прохождения</div>
+        </div>
+      </div>
+
+      <nav class="nav">
+        <a href="index.html">На главную</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="container">
+    <section class="test-page">
+      <div class="card">
+        <div class="session-head">
+          <div>
+            <h2 id="sessionTitle">Результат генерации</h2>
+            <p class="hint" id="sessionInfo">Тема: —</p>
+            <p class="hint" id="sessionModeInfo">Режим: —</p>
+          </div>
+          <div class="top-actions">
+            <button class="btn btn-secondary" id="toggleEditBtn">Редактировать</button>
+            <button class="btn btn-secondary" id="saveEditsBtn">Сохранить изменения</button>
+            <a href="index.html" class="btn btn-secondary">Назад</a>
+          </div>
+        </div>
+
+        <div class="share-box">
+          <h3>Ссылки на прохождение</h3>
+
+          <label for="localLink">Короткая ссылка</label>
+          <div class="share-row">
+            <input type="text" id="localLink" readonly />
+            <button class="btn btn-secondary btn-small" id="copyLocalLinkBtn">Копировать</button>
+          </div>
+          <p class="hint">Работает в этом же браузере.</p>
+
+          <label for="shareLink">Share-ссылка</label>
+          <div class="share-row">
+            <input type="text" id="shareLink" readonly />
+            <button class="btn btn-secondary btn-small" id="copyShareLinkBtn">Копировать</button>
+          </div>
+          <p class="hint">Можно отправить другому человеку. Для большого набора ссылка может быть длинной.</p>
+        </div>
+
+        <div class="download-box">
+          <h3>Скачать</h3>
+          <div class="actions">
+            <button class="btn btn-primary" id="downloadTestPdfBtn">Скачать тест в PDF</button>
+            <button class="btn btn-primary" id="downloadResultsPdfBtn">Скачать ответы и результаты в PDF</button>
+          </div>
+        </div>
+
+        <div id="sessionContainer">
+          <p class="empty-text">Данные не найдены. Сначала создайте генерацию на главной странице.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
