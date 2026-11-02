@@ -1,0 +1,27 @@
+Запуск в VS Code
+
+1. Распакуйте ZIP и откройте папку cdek-assistant в VS Code.
+2. Нужен Python 3.12 или новее с SQLite FTS5. Дополнительные пакеты для запуска не требуются.
+3. Откройте Terminal → New Terminal.
+4. Создайте локальный аккаунт:
+   python manage.py --data-dir ./data user administrator --role admin
+   Пароль задаётся дважды скрытым вводом.
+5. Запустите сервер:
+   python manage.py --data-dir ./data serve --dev --port 8080
+6. Оставьте терминал открытым и введите в браузере: http://127.0.0.1:8080
+
+Не открывайте web/index.html напрямую или через Live Server: для входа нужен Python-сервер.
+
+В архиве весь код приложения и тесты, но нет внутренних документов, базы данных, аккаунтов и ключей.
+Аккаунты облачной среды не переносятся на ваш компьютер.
+
+Чтобы загрузить материалы из ранее полученных архивов:
+- распакуйте cdek-codex-materials-stage2.zip в data/materials (checksums.json должен быть непосредственно в data/materials);
+- распакуйте cdek-packaging-addendum.zip в data/packaging-addendum;
+- выполните:
+  python manage.py --data-dir ./data import ./data/materials
+  python manage.py --data-dir ./data addendum ./data/packaging-addendum
+
+Для OpenAI задайте серверные переменные CDEK_MODEL_API_KEY и CDEK_MODEL, затем перезапустите сервер.
+Не помещайте ключ в исходники или Git. До индивидуального допуска источников рабочие рекомендации заблокированы.
+Подробности: README.md и VALIDATION.md.
