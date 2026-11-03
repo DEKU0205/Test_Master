@@ -11,7 +11,7 @@ from cdek.server import serve
 
 def main():
     parser = argparse.ArgumentParser(description='Private CDEK assistant')
-    parser.add_argument('--data-dir', default=os.getenv('CDEK_DATA_DIR', '/workspace/cdek-private'))
+    parser.add_argument('--data-dir', default=os.getenv('CDEK_DATA_DIR', str(Path(__file__).resolve().parent / 'data')))
     sub = parser.add_subparsers(dest='command', required=True)
     imp = sub.add_parser('import'); imp.add_argument('materials')
     add = sub.add_parser('addendum'); add.add_argument('materials')

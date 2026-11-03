@@ -3,6 +3,8 @@ import json
 import mimetypes
 import os
 import sqlite3
+import secrets
+import re
 import threading
 import time
 from http.cookies import SimpleCookie
@@ -77,6 +79,8 @@ class Handler(BaseHTTPRequestHandler):
         if post:
             if self.headers.get('Origin') != self.server.origin:
                 return self.reply(403, {'error': 'Недопустимый Origin'})
+            if path == '/api/admin/import-zip':
+                return self.upload_bundle(db, url)
             if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
                 return self.reply(415, {'error': 'Требуется JSON'})
             size = int(self.headers.get('Content-Length', '0'))
@@ -87,10 +91,32 @@ class Handler(BaseHTTPRequestHandler):
             if not isinstance(body, dict):
                 raise ValueError('Ожидался JSON-объект')
         if not post and path in ('/', '/app.js', '/style.css'):
-            file = WEB / {'/': 'index.html', '/app.js': 'app.js', '/style.css': 'style.css'}[path]
-            return self.reply(200, file.read_bytes(), mimetypes.guess_type(file)[0] + '; charset=utf-8')
+            filename, mime = {'/': ('index.html', 'text/html'), '/app.js': ('app.js', 'application/javascript'), '/style.css': ('style.css', 'text/css')}[path]
+            # Windows registry MIME mappings vary; nosniff requires an explicit JS type.
+            return self.reply(200, (WEB / filename).read_bytes(), mime + '; charset=utf-8')
         if not post and path == '/health':
-            return self.reply(200, {'status': 'ok'})
+            empty = not db.execute('SELECT 1 FROM users LIMIT 1').fetchone()
+            return self.reply(200, {'status': 'ok', 'setup_required': empty})
+        if post and path == '/api/setup':
+            token = self.headers.get('X-Setup-Token', '')
+            expected = getattr(self.server, 'setup_token', '')
+            if not token or not expected or not hmac.compare_digest(token, expected):
+                return self.reply(403, {'error': 'Откройте одноразовую ссылку первого запуска из окна start.cmd'})
+            with self.server.setup_lock:
+                if db.execute('SELECT 1 FROM users LIMIT 1').fetchone():
+                    return self.reply(409, {'error': 'Первый аккаунт уже создан. Используйте обычный вход'})
+                name = body.get('username', '')
+                password = body.get('password', '')
+                if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{3,64}', name):
+                    raise ValueError('Логин: 3–64 латинских буквы, цифры, точка, дефис или подчёркивание')
+                if not isinstance(password, str) or len(password) > 1024 or password != body.get('confirmation'):
+                    raise ValueError('Пароли должны совпадать и содержать не более 1024 символов')
+                hashed = auth.password_hash(password)
+                with db:
+                    db.execute('INSERT INTO users VALUES(?,?,?)', (name, hashed, 'admin'))
+                    store.audit(db, name, 'first_local_admin_created')
+                self.server.setup_token = ''
+            return self.reply(201, {'ok': True, 'username': name})
         if post and path == '/api/login':
             # Per-account and per-address rolling windows, synchronized across threads.
             identity = str(body.get('username', ''))[:100]
@@ -197,17 +223,57 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'source': dict(row), 'chunks': [dict(r) for r in db.execute('SELECT * FROM chunks WHERE source_id=?', (sid,))]})
         return self.reply(404, {'error': 'Не найдено'})
 
+    def upload_bundle(self, db, url):
+        from .zip_import import import_zip, MAX_UPLOAD
+        user = self.user(db)
+        if not user:
+            return self.reply(401, {'error': 'Требуется вход'})
+        if user['role'] != 'admin':
+            return self.reply(403, {'error': 'Импорт доступен администратору'})
+        if not hmac.compare_digest(self.headers.get('X-CSRF-Token', ''), user['csrf']):
+            return self.reply(403, {'error': 'Недействительный CSRF-токен'})
+        if self.headers.get('Content-Type', '').split(';')[0] not in ('application/zip', 'application/octet-stream'):
+            return self.reply(415, {'error': 'Выберите ZIP-архив материалов'})
+        size = int(self.headers.get('Content-Length', '0'))
+        if not 0 < size <= MAX_UPLOAD:
+            return self.reply(413, {'error': 'Размер ZIP должен быть от 1 байта до 64 МБ'})
+        kind = parse_qs(url.query).get('kind', [''])[0]
+        self.connection.settimeout(120)
+        payload = self.rfile.read(size)
+        if len(payload) != size:
+            raise ValueError('Загрузка ZIP прервалась. Повторите импорт')
+        with self.server.import_lock:
+            result = import_zip(db, Path(self.server.db_path).parent, payload, kind)
+            with db:
+                store.audit(db, user['name'], 'local_zip_uploaded', details={'kind': kind, 'verified_files': result['verified_files']})
+        return self.reply(200, result)
 
-def serve(db_path, port=8080, dev=False, origin=None):
+
+def make_server(db_path, port=8080, dev=False, origin=None):
     origin = origin or f'http://127.0.0.1:{port}'
     parsed = urlparse(origin)
     if parsed.scheme != 'https' and not (dev and parsed.hostname in ('127.0.0.1','localhost')):
         raise ValueError('Для закрытого доступа нужен HTTPS origin; локально используйте --dev')
     if parsed.path not in ('', '/') or parsed.query or parsed.fragment or parsed.username:
         raise ValueError('Origin должен содержать только схему и хост')
+    db = store.connect(db_path)
+    empty = not db.execute('SELECT 1 FROM users LIMIT 1').fetchone()
+    db.close()
     server = ThreadingHTTPServer(('127.0.0.1', port), Handler)
     server.db_path, server.secure = str(db_path), not dev
     server.origin, server.expected_host = origin.rstrip('/'), parsed.netloc
     server.attempts, server.lock, server.model_slots = {}, threading.Lock(), threading.BoundedSemaphore(2)
+    server.setup_lock, server.import_lock = threading.Lock(), threading.Lock()
+    server.setup_token = secrets.token_urlsafe(32) if empty and dev else ''
+    return server
+
+
+def serve(db_path, port=8080, dev=False, origin=None):
+    server = make_server(db_path, port, dev, origin)
     print(f'Assistant started on port {port}; authentication required; model configured: {model.configured()}', flush=True)
-    server.serve_forever()
+    if server.setup_token:
+        print(f'Первый запуск: http://127.0.0.1:{port}/#setup={server.setup_token}', flush=True)
+    try:
+        server.serve_forever()
+    finally:
+        server.server_close()

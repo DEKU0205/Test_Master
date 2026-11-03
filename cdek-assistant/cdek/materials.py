@@ -16,7 +16,7 @@ def digest(data):
 
 def verify(root):
     root = Path(root).resolve()
-    manifest = json.loads((root / 'checksums.json').read_text())
+    manifest = json.loads((root / 'checksums.json').read_text(encoding='utf-8-sig'))
     failures = []
     for name, expected in manifest.items():
         p = (root / name).resolve()
@@ -62,7 +62,7 @@ def compare_workbooks(root):
     reports = []
     for p in sorted((Path(root) / 'attachments').glob('*.xlsx')):
         actual = workbook(p)
-        supplied = json.loads(Path(str(p) + '.json').read_text())
+        supplied = json.loads(Path(str(p) + '.json').read_text(encoding='utf-8-sig'))
         differences = []
         for a, b in zip(actual['sheets'], supplied['sheets']):
             aa = {c['cell']: (c['value'], c['formula']) for c in a['cells']}

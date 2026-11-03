@@ -1,5 +1,11 @@
 'use strict';
 let me = null, sources = [], csrf = '';
+let setupToken = '';
+function captureSetupToken() {
+  const token = new URLSearchParams(location.hash.slice(1)).get('setup');
+  if (token) { setupToken = token; history.replaceState(null, '', location.pathname + location.search); }
+}
+captureSetupToken();
 const $ = id => document.getElementById(id);
 function node(tag, text, cls) { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; }
 function notify(text, error = false) { const box = $('global-message'); box.replaceChildren(); if (text) box.append(node('p', text, error ? 'notice error' : 'notice')); }
@@ -7,7 +13,7 @@ async function api(path, body) {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), path === '/api/answer' ? 75000 : 12000);
   const opts = {credentials: 'same-origin', headers: {}, signal: controller.signal};
-  if (body !== undefined) { opts.method = 'POST'; opts.headers = {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}; opts.body = JSON.stringify(body); }
+  if (body !== undefined) { opts.method = 'POST'; opts.headers = {'Content-Type': 'application/json', 'X-CSRF-Token': csrf}; if (path === '/api/setup') opts.headers['X-Setup-Token'] = setupToken; opts.body = JSON.stringify(body); }
   try {
     let res;
     try { res = await fetch(path, opts); }
@@ -18,20 +24,50 @@ async function api(path, body) {
     return data;
   } finally { clearTimeout(timer); }
 }
-function showLogin() { me = null; csrf = ''; $('workspace').hidden = true; $('login-view').hidden = false; $('logout').hidden = true; $('identity').textContent = ''; }
+function showLogin() { me = null; csrf = ''; $('workspace').hidden = true; $('setup-view').hidden = true; $('login-view').hidden = false; $('logout').hidden = true; $('identity').textContent = ''; }
 async function enter() {
   me = await api('/api/me'); csrf = me.csrf;
-  $('login-view').hidden = true; $('workspace').hidden = false; $('logout').hidden = false;
+  $('login-view').hidden = true; $('setup-view').hidden = true; $('workspace').hidden = false; $('logout').hidden = false;
   $('identity').textContent = me.name;
   for (const id of ['sources-tab', 'queue-tab', 'audit-tab']) $(id).hidden = me.role !== 'admin';
   $('model-status').textContent = me.model_configured ? '● OpenAI настроен' : '○ Модель не подключена';
-  await refreshCoverage(); await selectTab('assistant');
+  const coverage = await refreshCoverage(); await selectTab('assistant');
+  if (!coverage.total_sources && me.role === 'admin') $('import-panel').hidden = false;
 }
 async function refreshCoverage() {
   const c = await api('/api/coverage');
   $('approved-count').textContent = c.approved_sources; $('source-count').textContent = c.total_sources; $('queue-count').textContent = c.queue_count;
   $('coverage-notice').textContent = c.approved_sources ? 'Рабочий поиск использует только допущенные источники. Полнота Вики не подтверждена.' : 'База не допущена к консультациям. Доступны подготовка и проверка материалов.';
+  $('empty-database').hidden = c.total_sources !== 0;
+  $('empty-import-button').hidden = me.role !== 'admin';
+  $('empty-import-help').textContent = me.role === 'admin' ? 'Загрузите основной ZIP материалов СДЭК. После импорта документы будут доступны для проверки администратором.' : 'Попросите локального администратора загрузить основной ZIP материалов в разделе «Проверка источников».';
+  return c;
 }
+$('setup-form').addEventListener('submit', async e => {
+  e.preventDefault(); const button = $('setup-submit'); button.disabled = true; $('setup-error').textContent = '';
+  try {
+    const name = $('setup-username').value;
+    await api('/api/setup', {username:name, password:$('setup-password').value, confirmation:$('setup-confirmation').value});
+    setupToken = ''; $('setup-password').value = ''; $('setup-confirmation').value = '';
+    showLogin(); $('username').value = name; $('login-error').textContent = 'Администратор создан. Введите выбранный вами пароль, чтобы открыть рабочую среду.';
+    $('login-form').querySelector('button').disabled = false; $('password').focus();
+  } catch (err) { $('setup-error').textContent = err.message; } finally { button.disabled = false; }
+});
+$('empty-import-button').onclick = $('show-import').onclick = () => { $('import-panel').hidden = false; $('import-panel').scrollIntoView({behavior:'smooth'}); };
+$('import-form').addEventListener('submit', async e => {
+  e.preventDefault(); const file = $('import-file').files[0]; if (!file) return;
+  if (!file.name.toLowerCase().endsWith('.zip') || file.size > 64*1024*1024) { $('import-status').textContent = 'Выберите ZIP размером до 64 МБ.'; return; }
+  const button = $('import-submit'); button.disabled = true; $('import-status').textContent = 'Загрузка и проверка файлов… Не закрывайте страницу.';
+  const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 180000);
+  try {
+    const response = await fetch('/api/admin/import-zip?kind=' + encodeURIComponent($('import-kind').value), {method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/zip','X-CSRF-Token':csrf}, body:file, signal:controller.signal});
+    if (!(response.headers.get('content-type') || '').includes('application/json')) throw new Error('Сервер не смог обработать ZIP. Проверьте соединение.');
+    const result = await response.json(); if (!response.ok) throw new Error(result.error || 'Ошибка импорта');
+    $('import-status').textContent = `Импорт завершён. SHA256 проверен для ${result.verified_files} файлов. Материалы не допущены к консультациям.`;
+    $('import-file').value = ''; await refreshCoverage(); sources = (await api('/api/admin/sources')).sources; renderSources();
+  } catch(err) { $('import-status').textContent = err.name === 'AbortError' ? 'Время ожидания истекло. Проверьте счётчик документов перед повторным импортом.' : err.message; }
+  finally { clearTimeout(timer); button.disabled = false; }
+});
 $('login-form').addEventListener('submit', async e => {
   e.preventDefault(); const button = e.currentTarget.querySelector('button'); button.disabled = true; button.textContent = 'Выполняется вход…'; $('login-error').textContent = '';
   try { await api('/api/login', {username: $('username').value, password: $('password').value}); $('password').value = ''; await enter(); }
@@ -41,6 +77,7 @@ $('logout').onclick = async () => { try { await api('/api/logout', {}); } finall
 for (const button of document.querySelectorAll('[data-tab]')) button.onclick = () => selectTab(button.dataset.tab).catch(e => notify(e.message, true));
 async function selectTab(tab) {
   notify('');
+  if (tab !== 'sources') $('import-panel').hidden = true;
   for (const p of document.querySelectorAll('.tab-panel')) p.hidden = p.id !== tab + '-panel';
   for (const b of document.querySelectorAll('[data-tab]')) b.classList.toggle('active', b.dataset.tab === tab);
   if (tab === 'sources') { sources = (await api('/api/admin/sources')).sources; renderSources(); }
@@ -87,10 +124,11 @@ $('question-form').addEventListener('submit', async e => {
 const statuses = {not_confirmed:'Не проверен',latest_explicit:'Есть отметка последней редакции',retired_explicit:'Отменён',current_verified:'Допущен после проверки',superseded:'Заменён',unavailable:'Недоступен'};
 function renderSources() {
   const filter = $('source-filter').value.toLowerCase(); $('source-list').replaceChildren();
+  $('source-list-empty').hidden = sources.length !== 0;
   for (const s of sources.filter(s => (s.title + ' ' + s.id).toLowerCase().includes(filter))) {
     const row = node('div', undefined, 'source-row'); const info = node('div'); info.append(node('strong', `${s.id} · ${s.title}`), node('small', s.revision));
     const active = s.approved && s.expires_at && new Date(s.expires_at) > new Date();
-    info.append(node('span', active ? 'Допущен до ' + s.expires_at : (s.approved ? 'Срок допуска истёк' : statuses[s.status] || s.status), 'tag' + (active ? '' : ' warn')));
+    info.append(node('span', active ? 'Допущен до ' + s.expires_at : (s.approved ? 'Срок допуска истёк' : 'Не допущен · ' + (statuses[s.status] || s.status)), 'tag' + (active ? '' : ' warn')));
     const button = node('button', 'Проверить', 'quiet'); button.onclick = () => openSource(s.id).catch(e => notify(e.message, true)); row.append(info, button); $('source-list').append(row);
   }
 }
@@ -133,6 +171,11 @@ async function initialize() {
     const health = await api('/health');
     if (health.status !== 'ok') throw new Error('Сервер приложения не готов. Повторите позже.');
     $('connection-status').hidden = true; button.disabled = false;
+    if (health.setup_required) {
+      $('login-view').hidden = true; $('setup-view').hidden = false;
+      $('setup-help').hidden = Boolean(setupToken); $('setup-submit').disabled = !setupToken;
+      return;
+    }
     try { await enter(); }
     catch (err) { showLogin(); if (err.status !== 401) $('login-error').textContent = err.message; }
   } catch (err) {
@@ -141,4 +184,5 @@ async function initialize() {
     button.disabled = true;
   }
 }
+window.addEventListener('hashchange', () => { captureSetupToken(); initialize(); });
 initialize();

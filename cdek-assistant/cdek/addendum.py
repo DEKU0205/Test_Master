@@ -22,16 +22,16 @@ def anchored_chunks(markdown, headings):
 def import_addendum(db, root):
     root = Path(root).resolve()
     verified = verify(root)
-    cargo = json.loads((root/'cargo-packaging.json').read_text())
-    checks = json.loads((root/'extraction-checks.json').read_text())
-    image_gaps = json.loads((root/'image-text-gaps.json').read_text())
+    cargo = json.loads((root/'cargo-packaging.json').read_text(encoding='utf-8-sig'))
+    checks = json.loads((root/'extraction-checks.json').read_text(encoding='utf-8-sig'))
+    image_gaps = json.loads((root/'image-text-gaps.json').read_text(encoding='utf-8-sig'))
     prepared = []
     for sid in ('395','1037'):
         old = db.execute('SELECT * FROM sources WHERE id=?', (sid,)).fetchone()
         if not old:
             raise ValueError('Import the base registry before its packaging addendum')
-        source = json.loads((root/f'source-{sid}.json').read_text())
-        tables = json.loads((root/f'tables-{sid}.json').read_text())
+        source = json.loads((root/f'source-{sid}.json').read_text(encoding='utf-8-sig'))
+        tables = json.loads((root/f'tables-{sid}.json').read_text(encoding='utf-8-sig'))
         rows = [c for c in cargo if c['page_id'] == sid]
         check = checks[sid]
         if len(tables) != check['tables'] or sum(len(t['rows']) for t in tables) != check['source_rows'] or len(rows) != check['cargo_rows'] or len(source['regions']) != check['regions']:
@@ -53,7 +53,7 @@ def import_addendum(db, root):
             row = next(r for r in tables[0]['rows'] if r['row'] == item['source_row_zero_based'])
             if len(row['cells']) != 4 or [c['text'] for c in row['cells']] != [item[k] for k in ('cargo_category','cargo_example','characteristics','packaging')]:
                 raise ValueError('Cargo row / expanded table mismatch: '+item['id'])
-        md = (root/f'packaging-{sid}.md').read_text()
+        md = (root/f'packaging-{sid}.md').read_text(encoding='utf-8-sig')
         meta = json.loads(old['metadata'])
         base_hash = meta.get('supersedes_base_hash', old['hash'])
         metadata = {'package':'packaging-addendum','file':f'packaging-{sid}.md', 'storage_root':'packaging-addendum',

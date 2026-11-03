@@ -56,7 +56,7 @@ def ingest(db, root):
     root = Path(root).resolve()
     integrity = verify(root)
     tables = compare_workbooks(root)
-    registry = json.loads((root / 'registry.json').read_text())
+    registry = json.loads((root / 'registry.json').read_text(encoding='utf-8-sig'))
     with db:
         imported_ids = set()
         for row in registry:
@@ -76,7 +76,7 @@ def ingest(db, root):
                        text_chunks(data.decode('utf-8-sig')))
         for p in sorted((root / 'attachments').glob('*.xlsx')):
             w = workbook(p)
-            meta = json.loads(Path(str(p) + '.json').read_text())
+            meta = json.loads(Path(str(p) + '.json').read_text(encoding='utf-8-sig'))
             entry = {'id': 'xlsx:' + p.stem, 'title': p.name, 'url': meta['source'],
                      'revision': 'Снимок ' + meta['checked_date'] + '; актуальность не подтверждена',
                      'hash': digest(p.read_bytes()), 'status': 'not_confirmed',
@@ -91,14 +91,14 @@ def ingest(db, root):
                 db.execute('DELETE FROM chunks WHERE source_id=?', (previous['id'],))
                 audit(db, 'import', 'source_missing_from_new_bundle', previous['id'])
         # Backlog priority means review order, never mandatory applicability.
-        for row in json.loads((root / 'backlog.json').read_text()):
+        for row in json.loads((root / 'backlog.json').read_text(encoding='utf-8-sig')):
             priority = len(row.get('referred_by', []))
             db.execute('INSERT OR IGNORE INTO queue VALUES(?,?,?,?)', (row['page_id'], priority, row['status'], json.dumps(row)))
         for sid in ('104','310','395','1037','569','402','1021','1998','2139','2662'):
             db.execute('INSERT OR IGNORE INTO queue VALUES(?,?,?,?)', (sid, 100, 'requires_review' if sid != '2662' else 'source_unavailable', json.dumps({'reason': 'Core safety, packaging, precedence or known exclusion review'})))
         db.execute("INSERT INTO search(search) VALUES('rebuild')")
-        for key, value in [('coverage', json.loads((root / 'coverage.json').read_text())), ('integrity', integrity),
-                           ('workbooks', tables), ('asset_queue_count', len(json.loads((root / 'asset-review-queue.json').read_text())))]:
+        for key, value in [('coverage', json.loads((root / 'coverage.json').read_text(encoding='utf-8-sig'))), ('integrity', integrity),
+                           ('workbooks', tables), ('asset_queue_count', len(json.loads((root / 'asset-review-queue.json').read_text(encoding='utf-8-sig'))))]:
             db.execute('INSERT OR REPLACE INTO settings VALUES(?,?)', (key, json.dumps(value)))
         audit(db, 'import', 'bundle_verified', details=integrity)
     return {'integrity': integrity, 'workbooks': tables, 'sources': len(registry) + len(tables)}
